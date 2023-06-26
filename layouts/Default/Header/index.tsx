@@ -1,4 +1,4 @@
-import React, { Fragment } from "react";
+import React, { Fragment, useEffect } from "react";
 import { Dialog, Disclosure, Popover, Transition } from "@headlessui/react";
 import {
   ArrowPathIcon,
@@ -11,7 +11,10 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
-import ButtonConnect from "@/components/ButtonConnect";
+import LoginModal from "@/components/ButtonConnect";
+import LogoutModal from "@/components/ButtonLogout";
+import { useUserContext } from "@/contexts/userContext";
+import Cookies from "js-cookie";
 const products = [
   {
     name: "Analytics",
@@ -49,8 +52,53 @@ function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(" ");
 }
 
-const Header: React.FC = () => {
+const Header = () => {
+  const [isLoginModalOpen, setIsLoginModalOpen] = React.useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = React.useState(false);
+  const { isConnected, setIsConnected } = useUserContext();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+
+  const openLoginModal = () => {
+    setIsLoginModalOpen(true);
+  };
+
+  const closeLoginModal = () => {
+    setIsLoginModalOpen(false);
+  };
+  const openLogoutModal = () => {
+    setIsLogoutModalOpen(true);
+  };
+
+  const closeLogoutModal = () => {
+    setIsLogoutModalOpen(false);
+  };
+
+  const checkConnection = () => {
+    const connectedInfoStr = Cookies.get("connectedInfo");
+    if (connectedInfoStr) {
+      const connectedInfo = JSON.parse(connectedInfoStr);
+      const currentTime = new Date().getTime();
+      const hoursDiff =
+        (currentTime - connectedInfo.connectTime) / (1000 * 60 * 60);
+
+      if (hoursDiff <= 24) {
+        setIsConnected(true);
+      } else {
+        Cookies.remove("connectedInfo");
+      }
+    } else {
+      setIsConnected(false);
+    }
+  };
+
+  useEffect(() => {
+    checkConnection();
+    const CheckConnectionInterval = setInterval(checkConnection, 60000); //check Every Minute
+    return () => {
+      clearInterval(CheckConnectionInterval);
+    };
+  }, []);
+
   return (
     <div className={"fixed z-10 w-[100%] top-0 bg-black will-change-transform"}>
       <header className={"text-white"}>
@@ -60,6 +108,16 @@ const Header: React.FC = () => {
           }
           aria-label={"Global"}
         >
+          <LoginModal
+            isOpen={isLoginModalOpen}
+            onClose={closeLoginModal}
+            // className={"text-sm font-semibold leading-6 text-white"}
+          />
+          <LogoutModal
+            isOpen={isLogoutModalOpen}
+            onClose={closeLogoutModal}
+            // className={"text-sm font-semibold leading-6 text-white"}
+          />
           <div className={"flex lg:flex-1"}>
             <a href="/" className="-m-1.5 p-1.5">
               <span className="sr-only">Your Company</span>
@@ -162,9 +220,13 @@ const Header: React.FC = () => {
             </Link>
           </Popover.Group>
           <div className={"hidden lg:flex lg:flex-1 lg:justify-end"}>
-            <ButtonConnect
+            <button
+              onClick={isConnected ? openLogoutModal : openLoginModal}
               className={"text-sm font-semibold leading-6 text-white"}
-            />
+            >
+              {isConnected ? "Profile" : "Connect Wallet"}
+              <span aria-hidden={"true"}>&rarr;</span>
+            </button>
           </div>
         </nav>
         <Dialog
@@ -257,11 +319,22 @@ const Header: React.FC = () => {
                 >
                   Company
                 </a>
-                <ButtonConnect
+                <LoginModal
+                  isOpen={isLoginModalOpen}
+                  onClose={closeLoginModal}
+                  // className={
+                  //   "text-right block w-full rounded-lg px-3 py-2 text-base font-semibold leading-7 text-white hover:bg-gray-900"
+                  // }
+                />
+                <button
+                  onClick={isConnected ? openLogoutModal : openLoginModal}
                   className={
                     "text-right block w-full rounded-lg px-3 py-2 text-base font-semibold leading-7 text-white hover:bg-gray-900"
                   }
-                />
+                >
+                  {isConnected ? "Profile" : "Connect Wallet"}
+                  <span aria-hidden={"true"}>&rarr;</span>
+                </button>
               </div>
             </div>
           </Dialog.Panel>

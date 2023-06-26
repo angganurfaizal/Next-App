@@ -1,26 +1,141 @@
 import { Dialog, Popover, Transition } from "@headlessui/react";
-import React, { Fragment, useState } from "react";
+import React, { Fragment, useState, useEffect } from "react";
 import walletLists from "./walletLists";
+import { useUserContext } from "@/contexts/userContext";
+import Cookies from "js-cookie";
+import toast from "react-hot-toast";
+import { AddressPurposes, getAddress } from "sats-connect";
+import { DocumentDuplicateIcon } from "@heroicons/react/24/outline";
 
-export default function ButtonConnect({ className }: IProp) {
-  const [isOpen, setIsOpen] = useState(false);
+interface loginModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
 
-  function openModal() {
-    setIsOpen(true);
-  }
+interface AddressResponse {
+  addresses: { address: string }[];
+}
 
-  function closeModal() {
-    setIsOpen(false);
-  }
+const loginModal: React.FC<loginModalProps> = ({ isOpen, onClose }) => {
+  const { isConnected, setIsConnected, ordinalsAddress, setOrdinalsAddress } =
+    useUserContext();
+  const [isVisible, setIsVisible] = useState(isOpen);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsVisible(true);
+      checkWalletConnection(); //call checkWalletConnect function
+    } else {
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+        onClose();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  const checkWalletConnection = () => {
+    const connectedInfoStr = Cookies.get("connectedInfo");
+    if (connectedInfoStr) {
+      const connectedInfo = JSON.parse(connectedInfoStr);
+      const currentTime = new Date().getTime();
+      const hoursDiff =
+        (currentTime - connectedInfo.connectTime) / (1000 * 60 * 60);
+      //if difference is less than or equal to 24 hours, then maintain the connection
+      if (hoursDiff <= 24) {
+        setOrdinalsAddress(connectedInfo.ordinalsAddress);
+        setIsConnected(true);
+        toast.success("Connected to wallet Successfully!");
+        onClose();
+      } else {
+        Cookies.remove("connectedInfo");
+        setIsConnected(false);
+        setOrdinalsAddress("");
+      }
+    }
+  };
+
+  const connectWallet = async (walletType: string) => {
+    if (walletType === "Unisat") {
+      connectUnisatWallet(walletType);
+    } else if (walletType === "Xverse") {
+      connectXverseWallet(walletType);
+    } else if (walletType === "Hiro") {
+      connectHiroWallet(walletType);
+    }
+  };
+
+  const connectUnisatWallet = async (walletType: string) => {
+    try {
+      //Check if the Unisat Wallet is Installed
+      const unisat = (window as any).unisat;
+      if (typeof unisat !== "undefined") {
+        let accounts = await unisat.requestAccounts();
+        //After Successfull getting the accounts
+        if (accounts && accounts[0]) {
+          const connectedInfo = {
+            ordinalsAddress: accounts[0],
+            paymentAddress: accounts[0],
+            connectTime: new Date().getTime(),
+          };
+          Cookies.set("connectedInfo", JSON.stringify(connectedInfo), {
+            expires: 1,
+          });
+          setOrdinalsAddress(accounts[0]);
+          setIsConnected(true);
+          toast.success("Connected to Unisat wallet Successfully!");
+          onClose();
+        } else {
+          toast.error("Failed to Connect Unisat Wallet");
+        }
+      } else {
+        toast.error("Unisat wallet is not installed");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("An error occured while trying to connect to Unisat Wallet");
+    }
+  };
+
+  const connectXverseWallet = async (walletType: string) => {
+    const getAddressOptions = {
+      payload: {
+        purposes: [AddressPurposes.ORDINALS, AddressPurposes.PAYMENT],
+        message: `Address for receiving Ordinals using ${walletType}`,
+        network: {
+          type: "Mainnet" as const,
+        },
+      },
+      onFinish: (response: AddressResponse) => {
+        const connectedInfo = {
+          ordinalsAddress: response.addresses[0].address,
+          paymentAddress: response.addresses[1].address,
+          connecttime: new Date().getTime(),
+        };
+        Cookies.set("connectedInfo", JSON.stringify(connectedInfo), {
+          expires: 1,
+        });
+        setOrdinalsAddress(response.addresses[0].address);
+        setIsConnected(true);
+        toast.success("Connected to wallet Xverse Successfully!");
+        onClose();
+      },
+      onCancel: () => toast.error("Request Canceled"),
+    };
+    getAddress(getAddressOptions);
+  };
+
+  const connectHiroWallet = async (walletType: string) => {
+    // Call Hiro API here
+    toast.error("Hiro Wallet Not Supported: Coming Soon!");
+  };
+
+  if (!isVisible) return null;
 
   return (
     <>
-      <button type={"button"} className={className} onClick={openModal}>
-        Connect Wallet <span aria-hidden={"true"}>&rarr;</span>
-      </button>
-
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as={"div"} className={"relative z-10"} onClose={closeModal}>
+        <Dialog as={"div"} className={"relative z-10"} onClose={onClose}>
           <Transition.Child
             as={Fragment}
             enter={"ease-out duration-300"}
@@ -76,10 +191,15 @@ export default function ButtonConnect({ className }: IProp) {
                         {walletLists.map((item) => (
                           <div
                             key={item.name}
-                            className="group relative flex items-center gap-x-6 rounded-lg p-4 text-sm leading-6 hover:bg-gray-50"
+                            className="group cursor-pointer relative flex items-center gap-x-6 rounded-lg p-4 text-sm leading-6 hover:bg-gray-50"
+                            onClick={() => connectWallet(item.walletType)}
                           >
-                            <div className="flex h-11 w-11 flex-none items-center justify-center rounded-lg bg-gray-50 group-hover:bg-white"></div>
-                            <div className="flex-auto">{item.name}</div>
+                            <div className="flex h-11 w-11 flex-none items-center justify-center rounded-lg bg-gray-50 group-hover:bg-white">
+                              <img src={item.icon} />
+                            </div>
+                            <div className="flex-auto">
+                              Connect to {item.name}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -90,7 +210,7 @@ export default function ButtonConnect({ className }: IProp) {
                       className={
                         "inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                       }
-                      onClick={closeModal}
+                      onClick={onClose}
                     >
                       Close
                     </button>
@@ -103,8 +223,6 @@ export default function ButtonConnect({ className }: IProp) {
       </Transition>
     </>
   );
-}
+};
 
-interface IProp {
-  className: string;
-}
+export default loginModal;
